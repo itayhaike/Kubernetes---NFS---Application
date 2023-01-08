@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: Secret
+metadata:
+   name: mysql-secret
+data:
+   username: cnRnLWRldm9wcw==
+   password: cnRnLWRldm9wcw==
+   database: dGVzdA==
+   root-password: cnRnLXBhc3N3b3J
+---
+kind: PersistentVolume
+metadata:
+  name: nfs-worker2-mysql
+  labels:
+    storage.k8s.io/name: nfs
+    storage.k8s.io/part-of: kubernetes-complete-reference
+    storage.k8s.io/created-by: ssbostan
+spec:
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+    - ReadWriteMany
+  capacity:
+    storage: 10Gi
+  storageClassName: "rtg-data-mysql"
+  persistentVolumeReclaimPolicy: Recycle
+  volumeMode: Filesystem
+  nfs:
+    server: 192.168.31.39 #worker2
+    path: /rtg-data/mysql #must mkdir /rtg-data && mkdir /rtg-data/mysql
+    readOnly: no
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-worker2
+  labels:
+    storage.k8s.io/name: nfs
+    storage.k8s.io/part-of: kubernetes-complete-reference
+    storage.k8s.io/created-by: ssbostan
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: "rtg-data-mysql"
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3306
+    targetPort: 3306
+    nodePort: 31306
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/part-of: kubernetes-complete-reference
+    app.kubernetes.io/created-by: ssbostan
+spec:
+  replicas:
+  selector:
+    matchLabels:
+      app: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      nodeName: worker #the node that runs the application 
+      containers:
+        - image: mysql:8.0.18
+          name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              #value: pass
+              valueFrom:
+                secretKeyRef:
+                   name: mysql-secret
+                   key: root-password
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                   name: mysql-secret
+                   key: username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                   name: mysql-secret
+                   key: password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                   name: mysql-secret
+                   key: database
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - mountPath: /var/lib/mysql
+              name: nfs-worker2-mysql
+      volumes:
+        - name: nfs-worker2-mysql
+          nfs:
+            server: 192.168.31.39 #worker2
+            path: /rtg-data/mysql
+            readOnly: no
