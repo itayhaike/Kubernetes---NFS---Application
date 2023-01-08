@@ -1,0 +1,10 @@
+apt update && apt -y upgrade
+apt install -y nfs-server
+mkdir /data
+cat << EOF >> /etc/exports
+/data 192.168.12.8(rw,no_subtree_check,no_root_squash)
+EOF
+systemctl enable --now nfs-server
+exportfs -ar
+
+apt install -y nfs-common
